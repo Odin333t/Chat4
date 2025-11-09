@@ -1,5 +1,5 @@
+# app.py
 import os
-import sqlite3
 from flask import Flask, render_template_string, request, redirect, url_for, flash, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -10,13 +10,18 @@ from vercel.blob import put
 # --- Config ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/chat_app.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat_app.db'
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+# --- AUTO-INIT DB ON FIRST LOAD ---
+with app.app_context():
+    db.create_all()
+    print("Database initialized!")
 
 # Ensure upload dir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -786,3 +791,4 @@ if __name__ == '__main__':
     init_db()
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
