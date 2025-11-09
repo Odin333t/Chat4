@@ -1,51 +1,33 @@
 # app.py
 import os
-from flask import Flask, render_template_string, request, redirect, url_for, flash, abort
+from flask import Flask, render_template_string, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from mangum import Mangum
 from vercel.blob import put
 
-# --- Config ---
+# ---------- Config ----------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat_app.db'
-app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024   # 16 MB
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- AUTO-INIT DB ON FIRST LOAD ---
-with app.app_context():
+# ---------- Auto-create DB on first request ----------
+@app.before_first_request
+def create_tables():
     db.create_all()
-    print("Database initialized!")
+    print("Database tables created")
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-
-# --- Models ---
+# ---------- Models ----------
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
-
-class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=True)
-    content = db.Column(db.Text)
-    media_blob_path = db.Column(db.String(500))
-    timestamp = db.Column(db.DateTime, server_default=db.func.now())
-
-    # FIXED: Relationships
-    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_messages')
-    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_messages')
-    group = db.relationship('Group', backref='messages')
 
 class Group(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -53,16 +35,24 @@ class Group(db.Model):
 
 class GroupMember(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('group.id'), primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    user_id  = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id   = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    group_id    = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=True)
+    content     = db.Column(db.Text)
+    media_blob_path = db.Column(db.String(500))
+    timestamp   = db.Column(db.DateTime, server_default=db.func.now())
+
+    sender  = db.relationship('User', foreign_keys=[sender_id], backref='sent_messages')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_messages')
+    group   = db.relationship('Group', backref='messages')
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-# --- Init DB ---
-def init_db():
-    with app.app_context():
-        db.create_all()
 
 # --- Full HTML Template (Self-Contained) ---
 NEXUS_HTML = '''<!DOCTYPE html>
@@ -792,6 +782,7 @@ if __name__ == '__main__':
     init_db()
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
