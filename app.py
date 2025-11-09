@@ -25,6 +25,7 @@ with app.app_context():
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
 # --- Models ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -790,5 +791,6 @@ if __name__ == '__main__':
     init_db()
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
