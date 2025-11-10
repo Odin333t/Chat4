@@ -6,6 +6,17 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.utils import secure_filename
 from mangum import Mangum
 from vercel.blob import put
+from sqlalchemy.engine.url import make_url
+from sqlalchemy import create_engine
+import psycopg2
+
+
+url = make_url(os.getenv('DATABASE_URL'))
+url = url.set_query_param('sslmode', 'require')
+engine = create_engine(url)
+
+conn = psycopg2.connect(os.getenv('DATABASE_URL', '') + '?sslmode=require')
+print("Connected successfully!")
 
 # --- Config ---
 app = Flask(__name__)
@@ -786,4 +797,5 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
