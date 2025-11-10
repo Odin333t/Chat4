@@ -6,25 +6,22 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.utils import secure_filename
 from mangum import Mangum
 from vercel.blob import put
-from sqlalchemy.engine.url import make_url
-from sqlalchemy import create_engine
-import psycopg2
 
-
-url = make_url(os.getenv('DATABASE_URL'))
-url = url.set_query_param('sslmode', 'require')
-engine = create_engine(url)
-
-conn = psycopg2.connect(os.getenv('DATABASE_URL', '') + '?sslmode=require')
-print("Connected successfully!")
-
-# --- Config ---
+# --- Flask App Configuration ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')  # NEON POSTGRES
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
+# Ensure SSL is required for Neon PostgreSQL
+database_url = os.getenv('DATABASE_URL')
+if database_url and 'sslmode' not in database_url:
+    database_url += '?sslmode=require'
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
+
+# --- Database and Login Setup ---
 db = SQLAlchemy(app)
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -797,5 +794,6 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
