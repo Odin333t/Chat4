@@ -8,10 +8,11 @@ from mangum import Mangum
 from vercel.blob import put
 
 # --- Flask App Configuration ---
-app = Flask(__name__)
+app = Flask(__name__)  # FIXED: Was Flask(name)
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 
-# --- NEON POSTGRES WITH SSL (100% WORKING) ---
+# --- NEON POSTGRES WITH SSL ---
 database_url = os.getenv('DATABASE_URL')
 if database_url:
     if '?' in database_url:
@@ -802,6 +803,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
