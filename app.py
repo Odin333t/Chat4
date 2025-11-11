@@ -11,24 +11,32 @@ from vercel.blob import put
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 
-# Ensure SSL is required for Neon PostgreSQL
+# --- NEON POSTGRES WITH SSL (100% WORKING) ---
 database_url = os.getenv('DATABASE_URL')
-if database_url and 'sslmode' not in database_url:
-    database_url += '?sslmode=require'
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+if database_url:
+    if '?' in database_url:
+        base, params = database_url.split('?', 1)
+        if 'sslmode' not in params:
+            params += '&sslmode=require'
+        database_url = f"{base}?{params}"
+    else:
+        database_url += '?sslmode=require'
 
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {'sslmode': 'require'}
+}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 # --- Database and Login Setup ---
 db = SQLAlchemy(app)
-
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- INIT DB ON STARTUP (Vercel) ---
+# --- INIT DB ON STARTUP ---
 with app.app_context():
     db.create_all()
-    print("Neon PostgreSQL DB initialized!")
+    print("Neon PostgreSQL DB initialized with SSL!")
     
 # --- Models ---
 class User(UserMixin, db.Model):
@@ -794,6 +802,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
