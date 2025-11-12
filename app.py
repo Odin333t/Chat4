@@ -10,9 +10,10 @@ from mangum import Mangum
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 
-# --- NEON POSTGRES WITH SSL ---
+# --- NEON POSTGRES WITH FULL SSL SUPPORT ---
 database_url = os.getenv('DATABASE_URL')
 if database_url:
+    # Ensure SSL is required
     if '?' in database_url:
         base, params = database_url.split('?', 1)
         if 'sslmode' not in params:
@@ -23,22 +24,28 @@ if database_url:
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'connect_args': {'sslmode': 'require'}
+    'connect_args': {
+        'sslmode': 'require',
+        'sslrootcert': '/etc/ssl/certs/ca-certificates.crt'  # Use Vercel system certs
+    },
+    'pool_pre_ping': True,  # Validate connections
+    'pool_recycle': 3600    # Recycle every hour
 }
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# --- Database Setup ---
+# --- Database and Login Setup ---
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- INIT DB SAFELY ---
+# --- SAFE DB INIT ON STARTUP ---
 with app.app_context():
     try:
         db.create_all()
-        print("Neon DB initialized with SSL!")
+        print("Neon PostgreSQL DB initialized with SSL!")
     except Exception as e:
-        print("DB init failed:", str(e))
+        print("DB init error:", str(e))
+        # Don't crash the app — log and continue
     
 # --- Models ---
 class User(UserMixin, db.Model):
@@ -809,6 +816,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
