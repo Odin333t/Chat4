@@ -1,5 +1,5 @@
-# app.py
 import os
+import requests  # ADD THIS
 from flask import Flask, render_template_string, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -8,7 +8,6 @@ from mangum import Mangum
 
 # --- Flask App Configuration ---
 app = Flask(__name__)
-
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 
 # --- NEON POSTGRES WITH SSL ---
@@ -668,24 +667,27 @@ def send_message():
     if media and media.filename:
         filename = secure_filename(media.filename)
         try:
-            # --- LAZY IMPORT: Only when needed ---
-            from vercel.blob import put
-            blob_token = os.getenv('BLOB_READ_WRITE_TOKEN')
-            if not blob_token:
-                raise Exception("BLOB_READ_WRITE_TOKEN missing")
-            blob = put(
-                pathname=f"chat-media/{current_user.id}/{filename}",
-                data=media.read(),
-                access="public",
-                token=blob_token
-            )
-            media_url = blob.url
+            token = os.getenv('BLOB_READ_WRITE_TOKEN')
+            if not token:
+                raise Exception("BLOB_READ_WRITE_TOKEN not set")
+
+            # Direct HTTP upload to Vercel Blob
+            url = f"https://blob.vercel-storage.com/chat-media/{current_user.id}/{filename}"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Access": "public",
+                "x-vercel-blob-upload": "1"
+            }
+            response = requests.put(url, data=media.read(), headers=headers)
+            response.raise_for_status()
+            media_url = response.json().get('url') or url
+            print(f"Uploaded: {media_url}")
         except Exception as e:
-            print("Blob upload failed:", e)
-            flash('Media upload failed. Check BLOB token.', 'error')
+            print("Upload failed:", str(e))
+            flash('Media upload failed.', 'error')
             return redirect(request.referrer or url_for('home'))
 
-    # --- Save Message ---
+    # Save message
     try:
         if chat_type == 'private':
             receiver_id = request.form.get('receiver_id')
@@ -705,11 +707,13 @@ def send_message():
         db.session.add(msg)
         db.session.commit()
     except Exception as e:
-        print("DB save failed:", e)
-        flash('Message failed to save.', 'error')
+        print("DB error:", str(e))
+        flash('Message failed.', 'error')
         return redirect(request.referrer or url_for('home'))
 
     return redirect(request.referrer or url_for('home'))
+
+
 @app.route('/create_group', methods=['POST'])
 @login_required
 def create_group():
@@ -805,6 +809,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
