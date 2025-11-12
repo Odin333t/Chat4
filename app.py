@@ -5,10 +5,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from mangum import Mangum
-from vercel.blob import put
 
 # --- Flask App Configuration ---
-app = Flask(__name__)  # FIXED: Was Flask(name)
+app = Flask(__name__)
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
 
@@ -29,19 +28,18 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# --- Database and Login Setup ---
+# --- Database Setup ---
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- INIT DB ON STARTUP ---
+# --- INIT DB SAFELY ---
 with app.app_context():
     try:
         db.create_all()
-        print("DB initialized")
+        print("Neon DB initialized with SSL!")
     except Exception as e:
-        print("DB init failed:", e)
-
+        print("DB init failed:", str(e))
     
 # --- Models ---
 class User(UserMixin, db.Model):
@@ -663,7 +661,6 @@ def send_message():
     media = request.files.get('media')
     media_url = None
 
-    # Allow empty text if media is attached
     if not content and not media:
         flash('Cannot send empty message.', 'error')
         return redirect(request.referrer or url_for('home'))
@@ -671,47 +668,48 @@ def send_message():
     if media and media.filename:
         filename = secure_filename(media.filename)
         try:
+            # --- LAZY IMPORT: Only when needed ---
+            from vercel.blob import put
+            blob_token = os.getenv('BLOB_READ_WRITE_TOKEN')
+            if not blob_token:
+                raise Exception("BLOB_READ_WRITE_TOKEN missing")
             blob = put(
                 pathname=f"chat-media/{current_user.id}/{filename}",
                 data=media.read(),
                 access="public",
-                token=os.getenv('BLOB_READ_WRITE_TOKEN')
+                token=blob_token
             )
             media_url = blob.url
         except Exception as e:
-            flash('Media upload failed.', 'error')
+            print("Blob upload failed:", e)
+            flash('Media upload failed. Check BLOB token.', 'error')
             return redirect(request.referrer or url_for('home'))
 
-    if chat_type == 'private':
-        receiver_id = request.form.get('receiver_id')
-        if not receiver_id:
-            flash('Receiver missing.', 'error')
+    # --- Save Message ---
+    try:
+        if chat_type == 'private':
+            receiver_id = request.form.get('receiver_id')
+            if not receiver_id:
+                flash('Receiver missing.', 'error')
+                return redirect(url_for('home'))
+            msg = Message(
+                sender_id=current_user.id,
+                receiver_id=receiver_id,
+                content=content or '',
+                media_blob_path=media_url
+            )
+        else:
+            flash('Invalid chat type.', 'error')
             return redirect(url_for('home'))
-        msg = Message(
-            sender_id=current_user.id,
-            receiver_id=receiver_id,
-            content=content or '',
-            media_blob_path=media_url
-        )
-    elif chat_type == 'group':
-        group_id = request.form.get('group_id')
-        if not group_id:
-            flash('Group missing.', 'error')
-            return redirect(url_for('home'))
-        msg = Message(
-            sender_id=current_user.id,
-            group_id=group_id,
-            content=content or '',
-            media_blob_path=media_url
-        )
-    else:
-        flash('Invalid chat type.', 'error')
-        return redirect(url_for('home'))
 
-    db.session.add(msg)
-    db.session.commit()
+        db.session.add(msg)
+        db.session.commit()
+    except Exception as e:
+        print("DB save failed:", e)
+        flash('Message failed to save.', 'error')
+        return redirect(request.referrer or url_for('home'))
+
     return redirect(request.referrer or url_for('home'))
-
 @app.route('/create_group', methods=['POST'])
 @login_required
 def create_group():
@@ -807,6 +805,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
