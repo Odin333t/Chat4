@@ -1,7 +1,8 @@
-vercel==0.3.5
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
 Flask-Login==0.6.3
 Werkzeug==3.0.1
 mangum==0.17.0
 python-dotenv==1.0.1
+psycopg2-binary==2.9.9  # ADD THIS for Neon Postgres
+requests==2.31.0  # ADD THIS for HTTP Blob upload
