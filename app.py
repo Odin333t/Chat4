@@ -581,6 +581,18 @@ NEXUS_HTML = '''<!DOCTYPE html>
 </html>'''
 
 # --- Routes ---
+
+@app.route('/test')
+def test():
+    try:
+        with app.app_context():
+            # Test DB connection
+            user_count = User.query.count()
+            return f"DB connected! Users: {user_count}"
+    except Exception as e:
+        return f"DB error: {str(e)}"
+
+
 @app.route('/')
 @login_required
 def home():
@@ -816,6 +828,7 @@ handler = Mangum(app, lifespan="off")
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
